@@ -1,0 +1,44 @@
+version: "2.3"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    restart: unless-stopped
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    expose:
+      - "5672"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+
+  mongodb:
+    image: mongo
+    restart: unless-stopped
+    volumes:
+      - mongodb-data:/var/lib/mongodb
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+
+  face_reid:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ~/Desktop/driveData:/video_data
+    depends_on:
+      - mongodb
+      - rabbitmq
+    links:
+      - mongodb
+      - rabbitmq
+
+volumes:
+  rabbitmq-data:
+  mongodb-data:
+
+networks:
+  default:
