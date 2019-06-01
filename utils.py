@@ -61,36 +61,45 @@ def init_result_writer(cap, out):
     video_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     video_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     writer_fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(out, writer_fourcc, fps,
-                          (int(video_width), int(video_height)))
+    out = cv2.VideoWriter(out, writer_fourcc, fps, (int(video_width), int(video_height)))
     return out
 
 
-def draw_face_rect(frame, xmin, ymin, xmax, ymax, conf):
-    cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 255, 0), 2)
+def draw_face_rect(frame, xmin, ymin, xmax, ymax, conf, color):
+    cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), color, 2)
     cv2.putText(frame, str(round(conf * 100, 1)) + ' %',
-                (xmin, ymin - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 255, 0), 1)
+                (xmin, ymin - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
     return frame
 
 
-def get_face_rect(xmin, ymin, xmax, ymax, origin_h, origin_w):
-    xmin = max(0, int(origin_w * xmin))
-    ymin = max(0, int(origin_h * ymin))
-    xmax = min(int(origin_w * xmax), origin_w)
-    ymax = min(int(origin_h * ymax), origin_h)
-    return xmin, ymin, xmax, ymax
+def get_face_rect(bbox, origin_h, origin_w, h, w):
+    def scale_bbox(bbox, transform_h, transform_w, h, w):
+        scale = min(h / transform_h, w / transform_w)
+        resized_w = transform_w * scale
+        resized_h = transform_h * scale
+        bbox = [bbox[0] * w / resized_w, bbox[1] * h / resized_h,
+                bbox[2] * w / resized_w, bbox[3] * h / resized_h]
+        return bbox
+
+    image_corners = np.array([origin_w, origin_h, origin_w, origin_h])
+    bbox = scale_bbox(bbox, origin_h, origin_w, h, w)
+    bbox = ([bbox[0], bbox[1], bbox[2], bbox[3]] * image_corners).astype(int)
+    return bbox.tolist()
 
 
 def resize_image(image, w, h):
     new_image = np.zeros((h, w, 3))
     scale = min(w / image.shape[1], h / image.shape[0])
-    resized = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+    resized = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)[:h, :w]
     new_image[:resized.shape[0], :resized.shape[1]] = resized
     return new_image
 
 
-def preprocess_image_format(image, w, h):
-    image = resize_image(image, w, h)
+def preprocess_image_format(image, w, h, net_type):
+    if net_type == 'face':
+        image = resize_image(image, w, h)
+    if net_type == 'reid':
+        image = cv2.resize(image, (w, h), interpolation=cv2.INTER_LINEAR)
     image = image.transpose((2, 0, 1))
     return image
 

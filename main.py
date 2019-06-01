@@ -15,7 +15,8 @@ LOGGER = create_logger()
 
 def listen_queue(callback, queue_name='face'):
     connection = pika.BlockingConnection(
-        pika.ConnectionParameters(host=config.RABBITMQ['ip'], port=config.RABBITMQ['port'])
+        pika.ConnectionParameters(host=config.RABBITMQ['ip'], port=config.RABBITMQ['port'],
+                                  heartbeat=config.RABBITMQ['heartbeat'])
     )
     channel = connection.channel()
     channel.queue_declare(queue=queue_name)
@@ -42,21 +43,22 @@ def face(ch, method, properties, body):
         #     LOGGER.info(json.dumps(response))
     else:
         LOGGER.info('No such file: {0}'.format(filename_path))
+    LOGGER.info('{0} DONE!'.format(filename_path))
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
 if __name__ == "__main__":
     while True:
         # try:
-            MONGO_CLIENT = pymongo.MongoClient(
-                host=config.DB['MONGODB']['ip'], port=config.DB['MONGODB']['port']
-            )
+        #     MONGO_CLIENT = pymongo.MongoClient(
+        #         host=config.DB['MONGODB']['ip'], port=config.DB['MONGODB']['port']
+        #     )
 
             LOGGER.info('try person_detection consume')
             listen_queue(face)
             LOGGER.info('end person_detection consume')
             break
-
+        #
         # except Exception as e:
         #     LOGGER.info('cannot start because {}'.format(e))
         #     time.sleep(5)

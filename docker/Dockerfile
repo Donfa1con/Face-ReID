@@ -25,6 +25,8 @@ RUN mkdir -p $TEMP_DIR && \
     rm -rf $TEMP_DIR && \
     $INSTALL_DIR/install_dependencies/install_openvino_dependencies.sh
 
+RUN apt-get install -y libopenblas-base libomp-dev
+
 WORKDIR /code
 
 COPY requirements.txt  /code/
