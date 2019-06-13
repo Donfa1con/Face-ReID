@@ -30,11 +30,11 @@ def get_faces(params, frame):
     return faces
 
 
-def get_person_idx(face_emb, mongo, detected_face, padded_face, blur):
+def get_person_idx(face_emb, mongo, detected_face, padded_face):
     if FAISS_INDEX.ntotal == 0:
         FAISS_INDEX.add(face_emb)
         person_name = 0
-        create_mongo_face(person_name, mongo, detected_face, padded_face, blur)
+        create_mongo_face(person_name, mongo, detected_face, padded_face)
     else:
         dist, idxs = FAISS_INDEX.search(face_emb, 1)
         dist = dist[0][0]
@@ -43,20 +43,21 @@ def get_person_idx(face_emb, mongo, detected_face, padded_face, blur):
         if 1 - dist > config.DIST_THRESHOLD:
             person_name = FAISS_INDEX.ntotal
             FAISS_INDEX.add(face_emb)
-            create_mongo_face(person_name, mongo, detected_face, padded_face, blur)
+            create_mongo_face(person_name, mongo, detected_face, padded_face)
         else:
             person_name = idxs
     return person_name
 
 
-def create_mongo_face(person_idx, mongo, detected_face, padded_face, blur):
-    detected_face_string = cv2.imencode('.jpg', detected_face[..., ::-1])[1].tostring()
-    padded_face_string = cv2.imencode('.jpg', padded_face[..., ::-1])[1].tostring()
+def create_mongo_face(person_idx, mongo, detected_face, padded_face):
+    detected_face_string = cv2.imencode('.jpg', detected_face[..., ::-1],
+                                        [int(cv2.IMWRITE_JPEG_QUALITY), 100])[1].tostring()
+    padded_face_string = cv2.imencode('.jpg', padded_face[..., ::-1],
+                                      [int(cv2.IMWRITE_JPEG_QUALITY), 100])[1].tostring()
     mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].insert(
         {'_id': str(person_idx),
          'face_crop': padded_face_string,
-         'face': detected_face_string,
-         'blur': blur})
+         'face': detected_face_string})
 
 
 def update_mongo_faces(mongo, filename, faces_ts, detected_faces):
@@ -110,9 +111,9 @@ def detect(params, filename, db_clients):
             y_pad = (ymax - ymin)
             x_pad = (xmax - xmin)
             padded_face = frame[max(0, ymin - y_pad):ymax + y_pad,
-                                max(0, xmin - x_pad):xmax + x_pad]
+                          max(0, xmin - x_pad):xmax + x_pad]
 
-            person_idx = get_person_idx(face_emb, mongo, origin_face, padded_face, blur)
+            person_idx = get_person_idx(face_emb, mongo, origin_face, padded_face)
             faces_ts[person_idx].append(ts)
             detected_faces.add(person_idx)
 

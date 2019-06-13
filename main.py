@@ -45,22 +45,22 @@ def face(ch, method, properties, body):
 
 if __name__ == "__main__":
     while True:
-        # try:
-        MONGO_CLIENT = pymongo.MongoClient(
-            host=config.DB['MONGODB']['ip'], port=config.DB['MONGODB']['port']
-        )
-        REDIS_CLIENT = redis.Redis(
-            host=config.DB['REDIS']['ip'],
-            port=config.DB['REDIS']['port'],
-            db=config.DB['REDIS']['db']
-        )
-        DB_CLIENTS = {'redis': REDIS_CLIENT, 'mongo': MONGO_CLIENT}
+        try:
+            MONGO_CLIENT = pymongo.MongoClient(
+                host=config.DB['MONGODB']['ip'], port=config.DB['MONGODB']['port']
+            )
+            REDIS_CLIENT = redis.Redis(
+                host=config.DB['REDIS']['ip'],
+                port=config.DB['REDIS']['port'],
+                db=config.DB['REDIS']['db']
+            )
+            DB_CLIENTS = {'redis': REDIS_CLIENT, 'mongo': MONGO_CLIENT}
+    
+            LOGGER.info('try person_detection consume')
+            listen_queue(face)
+            LOGGER.info('end person_detection consume')
+            break
 
-        LOGGER.info('try person_detection consume')
-        listen_queue(face)
-        LOGGER.info('end person_detection consume')
-        break
-
-    # except Exception as e:
-    #     LOGGER.info('cannot start because {}'.format(e))
-    #     time.sleep(5)
+        except Exception as e:
+            LOGGER.info('cannot start because {}'.format(e))
+            time.sleep(5)
