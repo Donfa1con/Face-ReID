@@ -38,7 +38,9 @@ RUN /opt/intel/openvino/deployment_tools/tools/model_downloader/downloader.py --
 
 ENV FACE_MODEL_PATH=./models/Transportation/object_detection/face/pruned_mobilenet_reduced_ssd_shared_weights/dldt/face-detection-adas-0001 \
     REID_MODEL_PATH=./models/Retail/object_reidentification/face/mobilenet_based/dldt/face-reidentification-retail-0095 \
-    PLUGIN_PATH=/opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_avx2.so
+    PLUGIN_PATH=/opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_avx2.so \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8
 
 COPY . /code
 

@@ -41,35 +41,17 @@ def init_detection_config():
     _, _, face_net_h, face_net_w = face_net.inputs[next(iter(face_net.inputs))].shape
     _, _, reid_net_h, reid_net_w = reid_net.inputs[next(iter(reid_net.inputs))].shape
 
-    list_params = {'face': {'net': exec_face_net,
-                            'threshold': 0,
-                            'input_size': {'h': face_net_h,
-                                           'w': face_net_w}
-                            },
+    params = {'face': {'net': exec_face_net,
+                       'input_size': {'h': face_net_h,
+                                      'w': face_net_w}
+                       },
 
-                   'reid': {'net': exec_reid_net,
-                            'threshold': 0,
-                            'input_size': {'h': reid_net_h,
-                                           'w': reid_net_w}
-                            }
-                   }
-    return list_params
-
-
-def init_result_writer(cap, out):
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    video_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    video_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    writer_fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(out, writer_fourcc, fps, (int(video_width), int(video_height)))
-    return out
-
-
-def draw_face_rect(frame, xmin, ymin, xmax, ymax, conf, color):
-    cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), color, 2)
-    cv2.putText(frame, str(round(conf * 100, 1)) + ' %',
-                (xmin, ymin - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-    return frame
+              'reid': {'net': exec_reid_net,
+                       'input_size': {'h': reid_net_h,
+                                      'w': reid_net_w}
+                       }
+              }
+    return params
 
 
 def get_face_rect(bbox, origin_h, origin_w, h, w):

@@ -2,21 +2,31 @@ version: "2.3"
 services:
   rabbitmq:
     image: rabbitmq:3-management
-    hostname: rabbitmq
     restart: unless-stopped
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+      - ~/Desktop/db_faceReId/rabbitmq:/var/lib/rabbitmq
     expose:
       - "5672"
     ports:
       - "15672:15672"
       - "5672:5672"
 
+  redis:
+    image: redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ~/Desktop/db_faceReId/redis:/data
+    expose:
+      - "6379"
+    ports:
+      - "6379:6379"
+
   mongodb:
     image: mongo
     restart: unless-stopped
     volumes:
-      - mongodb-data:/var/lib/mongodb
+      - ~/Desktop/db_faceReId/mongo:/data/db
     expose:
       - "27017"
     ports:
@@ -29,16 +39,20 @@ services:
     restart: unless-stopped
     volumes:
       - ~/Desktop/driveData:/video_data
+      - ~/Desktop/db_faceReId/faiss:/faiss
     depends_on:
       - mongodb
       - rabbitmq
+      - redis
     links:
       - mongodb
       - rabbitmq
+      - redis
 
 volumes:
   rabbitmq-data:
   mongodb-data:
+  redis-data:
 
 networks:
   default:

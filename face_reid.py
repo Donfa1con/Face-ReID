@@ -1,5 +1,5 @@
+import collections
 import os
-import time
 
 import cv2
 import faiss
@@ -14,34 +14,82 @@ else:
     FAISS_INDEX = faiss.IndexFlatIP(256)
 
 
-def detect(params, filename):
-    cap = cv2.VideoCapture(os.path.join(config.VIDEO_PATH, filename))
-    out = utils.init_result_writer(cap, os.path.join(config.RESULT_VIDEO_PATH,
-                                                     filename[len(config.VIDEO_PATH) + 1:]))
-    p_id = 2
-    num = 0
-    while cap.isOpened():
-        start = time.time()
-        num += 1
+def get_face_emb(params, resized_face):
+    output = list(params['reid']['net'].infer({"0": resized_face}).values())
+    face_emb = np.array([v[0][0] for v in output[0][0]])
+    norm_face_emb = (face_emb / np.linalg.norm(face_emb)).reshape(1, -1).astype('float32')
+    return norm_face_emb
 
+
+def get_faces(params, frame):
+    p_idx = 2
+    infer_frame = utils.preprocess_image_format(frame, **params['face']['input_size'],
+                                                net_type='face')
+    output = params['face']['net'].infer({'data': infer_frame})
+    faces = [face for face in output['detection_out'][0][0] if face[p_idx] > config.FACE_CONF]
+    return faces
+
+
+def get_person_idx(face_emb, mongo, detected_face, padded_face, blur):
+    if FAISS_INDEX.ntotal == 0:
+        FAISS_INDEX.add(face_emb)
+        person_name = 0
+        create_mongo_face(person_name, mongo, detected_face, padded_face, blur)
+    else:
+        dist, idxs = FAISS_INDEX.search(face_emb, 1)
+        dist = dist[0][0]
+        idxs = idxs[0][0]
+
+        if 1 - dist > config.DIST_THRESHOLD:
+            person_name = FAISS_INDEX.ntotal
+            FAISS_INDEX.add(face_emb)
+            create_mongo_face(person_name, mongo, detected_face, padded_face, blur)
+        else:
+            person_name = idxs
+    return person_name
+
+
+def create_mongo_face(person_idx, mongo, detected_face, padded_face, blur):
+    detected_face_string = cv2.imencode('.jpg', detected_face[..., ::-1])[1].tostring()
+    padded_face_string = cv2.imencode('.jpg', padded_face[..., ::-1])[1].tostring()
+    mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].insert(
+        {'_id': str(person_idx),
+         'face_crop': padded_face_string,
+         'face': detected_face_string,
+         'blur': blur})
+
+
+def update_mongo_faces(mongo, filename, faces_ts, detected_faces):
+    for person_idx in detected_faces:
+        mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].update_one(
+            {'_id': str(person_idx)},
+            {'$set': {'paths.{0}'.format(filename.replace('.', '_')): faces_ts[person_idx]}},
+            upsert=True
+        )
+
+
+def detect(params, filename, db_clients):
+    mongo = db_clients['mongo']
+    redis = db_clients['redis']
+    redis.set(filename, 0)
+
+    cap = cv2.VideoCapture(filename)
+    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    frame_num = 0
+    faces_ts = collections.defaultdict(list)
+    detected_faces = set()
+    while cap.isOpened():
         ret, frame = cap.read()
-        ts = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_num += 1
         if not ret:
             break
 
-        infer_frame = utils.preprocess_image_format(frame, **params['face']['input_size'],
-                                                    net_type='face')
-        output = params['face']['net'].infer({'data': infer_frame})
-        detection_out = [face for face in output['detection_out'][0][0]
-                         if face[2] > config.FACE_CONF]
-        dist = None
-        for face in detection_out:
-            skip = False
-            person_name = None
-
+        ts = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+        faces = get_faces(params, frame)
+        for face in faces:
             s = (face[6] - face[4]) * (face[5] - face[3])
             if s < config.MIN_SIZE:
-                skip = True
+                continue
 
             xmin, ymin, xmax, ymax = utils.get_face_rect(face[3:], *frame.shape[:2],
                                                          **params['face']['input_size'])
@@ -53,52 +101,27 @@ def detect(params, filename):
             resized_face = utils.preprocess_image_format(origin_face,
                                                          **params['reid']['input_size'],
                                                          net_type='reid')
-
             blur = utils.get_blur_coef(resized_face)
             if blur > config.BLUR_THRESHOLD:
-                skip = True
+                continue
 
-            output = list(params['reid']['net'].infer({"0": resized_face}).values())
-            face_emb = np.array([v[0][0] for v in output[0][0]])
-            norm_face_emb = (face_emb / np.linalg.norm(face_emb)).reshape(1, -1).astype('float32')
+            face_emb = get_face_emb(params, resized_face)
 
-            if FAISS_INDEX.ntotal == 0 and not skip:
-                FAISS_INDEX.add(norm_face_emb)
-                person_name = 0
-            else:
-                dist, idxs = FAISS_INDEX.search(norm_face_emb, 1)
-                dist = dist[0][0]
-                idxs = idxs[0][0]
+            y_pad = (ymax - ymin)
+            x_pad = (xmax - xmin)
+            padded_face = frame[max(0, ymin - y_pad):ymax + y_pad,
+                                max(0, xmin - x_pad):xmax + x_pad]
 
-                if 1 - dist > config.DIST_THRESHOLD and not skip:
-                    FAISS_INDEX.add(norm_face_emb)
-                    person_name = FAISS_INDEX.ntotal
-                else:
-                    person_name = idxs
+            person_idx = get_person_idx(face_emb, mongo, origin_face, padded_face, blur)
+            faces_ts[person_idx].append(ts)
+            detected_faces.add(person_idx)
 
-            if skip:
-                color = (0, 0, 255)
-                if person_name is None:
-                    person_name = 'skip'
-            else:
-                color = (255, 255, 0)
+        if frame_num % (30 * 60) == 0:  # update db each 1 min of video
+            redis.set(filename, frame_num / frame_count * 100)
+            faiss.write_index(FAISS_INDEX, config.INDEX_FACE_PATH)
+            update_mongo_faces(mongo, filename, faces_ts, detected_faces)
+            detected_faces = set()
 
-            frame = utils.draw_face_rect(frame, xmin, ymin, xmax, ymax, face[p_id], color)
-
-            cv2.putText(frame, "person {0}".format(person_name),
-                        (xmin, ymin - 24), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            cv2.putText(frame, "s: {0:.4f}".format(s),
-                        (xmin, ymin - 38), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            cv2.putText(frame, "blur: {0}".format(int(blur)),
-                        (xmin, ymin - 52), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            if dist is not None:
-                cv2.putText(frame, "dist {0:.4f}".format(1 - dist),
-                            (xmin, ymin - 64), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-
-        end = time.time() - start
-        cv2.putText(frame, str(round(1 / end, 2)) + 'fps',
-                    (20, 20), cv2.FONT_HERSHEY_COMPLEX, 0.6, (255, 255, 0), 1)
-
-        out.write(frame)
-
+    update_mongo_faces(mongo, filename, faces_ts, detected_faces)
     faiss.write_index(FAISS_INDEX, config.INDEX_FACE_PATH)
+    db_clients['redis'].set(filename, 100)
