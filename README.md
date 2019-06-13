@@ -33,7 +33,7 @@ connection.close()
 import redis
 import config
 
-redis.Redis(host='localhost', port=6379, db=0)
+r = redis.Redis(host='localhost', port=6379, db=0)
 for key in r.scan_iter("*"):
     if r.get(key) != 100:
         print(key, r.get(key))
