@@ -1,4 +1,3 @@
-import json
 import os
 import time
 
@@ -33,7 +32,7 @@ def face(ch, method, properties, body):
     filename_path = os.path.join(config.VIDEO_PATH, filename)
     LOGGER.info('Checking: {0}'.format(filename_path))
 
-    if int(REDIS_CLIENT.get(filename_path) or 0) == 100:
+    if float(REDIS_CLIENT.get(filename_path) or 0) == 100:
         LOGGER.info('File was cached in redis: {0}'.format(filename_path))
     elif os.path.isfile(filename_path):
         detect(DETECTION_CONFIG, filename_path, DB_CLIENTS)
@@ -45,7 +44,7 @@ def face(ch, method, properties, body):
 
 if __name__ == "__main__":
     while True:
-        try:
+        # try:
             MONGO_CLIENT = pymongo.MongoClient(
                 host=config.DB['MONGODB']['ip'], port=config.DB['MONGODB']['port']
             )
@@ -55,12 +54,12 @@ if __name__ == "__main__":
                 db=config.DB['REDIS']['db']
             )
             DB_CLIENTS = {'redis': REDIS_CLIENT, 'mongo': MONGO_CLIENT}
-    
+
             LOGGER.info('try person_detection consume')
             listen_queue(face)
             LOGGER.info('end person_detection consume')
             break
 
-        except Exception as e:
-            LOGGER.info('cannot start because {}'.format(e))
-            time.sleep(5)
+        # except Exception as e:
+        #     LOGGER.info('cannot start because {}'.format(e))
+        #     time.sleep(5)

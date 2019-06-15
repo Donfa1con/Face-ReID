@@ -339,7 +339,6 @@ docs/source/generated/
 /*.xml
 /*.json
 /*.so
-/*.txt
 /*.mapping
 /*.dat
 /*.svg

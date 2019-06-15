@@ -1,7 +1,8 @@
-VIDEO_PATH = '/video_data'
+VIDEO_PATH = '/video'
+
+IMAGE_PATH = '/faces'
 
 INDEX_FACE_PATH = '/faiss/face_vectors.faiss'
-
 RABBITMQ = {
     'ip': 'rabbitmq',
     'port': '5672',
@@ -24,5 +25,4 @@ DB = {
 
 DIST_THRESHOLD = 0.4
 FACE_CONF = 0.95
-BLUR_THRESHOLD = 100
-MIN_SIZE = 0.005
+BLUR_THRESHOLD = 150

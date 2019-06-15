@@ -50,14 +50,33 @@ def get_person_idx(face_emb, mongo, detected_face, padded_face):
 
 
 def create_mongo_face(person_idx, mongo, detected_face, padded_face):
-    detected_face_string = cv2.imencode('.jpg', detected_face[..., ::-1],
-                                        [int(cv2.IMWRITE_JPEG_QUALITY), 100])[1].tostring()
-    padded_face_string = cv2.imencode('.jpg', padded_face[..., ::-1],
-                                      [int(cv2.IMWRITE_JPEG_QUALITY), 100])[1].tostring()
-    mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].insert(
-        {'_id': str(person_idx),
-         'face_crop': padded_face_string,
-         'face': detected_face_string})
+    if config.IMAGE_PATH is None:
+        detected_face_string = cv2.imencode('.jpg', detected_face[..., ::-1],
+                                            [int(cv2.IMWRITE_JPEG_QUALITY), 100])[1].tostring()
+        padded_face_string = cv2.imencode('.jpg', padded_face[..., ::-1],
+                                          [int(cv2.IMWRITE_JPEG_QUALITY), 80])[1].tostring()
+        mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].insert(
+            {'_id': str(person_idx),
+             'face_pad': padded_face_string,
+             'face': detected_face_string})
+    else:
+        path_to_face_pad = os.path.join(config.IMAGE_PATH, 'face_pad')
+        path_to_face = os.path.join(config.IMAGE_PATH, 'face')
+        if not os.path.exists(path_to_face_pad):
+            os.makedirs(path_to_face_pad)
+        if not os.path.exists(path_to_face):
+            os.makedirs(path_to_face)
+
+        detected_face_path = os.path.join(path_to_face, 'face_{0}.jpg'.format(person_idx))
+        padded_face_path = os.path.join(path_to_face_pad, 'face_pad_{0}.jpg'.format(person_idx))
+        cv2.imwrite(detected_face_path, detected_face, [cv2.IMWRITE_JPEG_QUALITY, 100])
+        cv2.imwrite(padded_face_path, padded_face, [cv2.IMWRITE_JPEG_QUALITY, 80])
+
+        mongo[config.DB['MONGODB']['db']][config.DB['MONGODB']['table']].insert(
+            {'_id': str(person_idx),
+             'face_pad_path': detected_face_path,
+             'face_path': padded_face_path})
+    faiss.write_index(FAISS_INDEX, config.INDEX_FACE_PATH)
 
 
 def update_mongo_faces(mongo, filename, faces_ts, detected_faces):
@@ -67,6 +86,27 @@ def update_mongo_faces(mongo, filename, faces_ts, detected_faces):
             {'$set': {'paths.{0}'.format(filename.replace('.', '_')): faces_ts[person_idx]}},
             upsert=True
         )
+
+
+def align_face(params, origin_face, frame, bbox):
+    xmin, ymin, xmax, ymax = bbox
+    resized_face = utils.preprocess_image_format(origin_face,
+                                                 **params['landmarks']['input_size'],
+                                                 net_type='landmarks')
+
+    output = list(params['landmarks']['net'].infer({'0': resized_face}).values())[0][0]
+
+    left_eye_center = np.array([output[0][0][0], output[1][0][0]]) * resized_face.shape[1:]
+    right_eye_center = np.array([output[2][0][0], output[3][0][0]]) * resized_face.shape[1:]
+
+    delta = right_eye_center - left_eye_center
+    angle = np.degrees(np.arctan2(delta[1], delta[0]))
+    eyes_center = (xmin + (xmax - xmin) // 2, ymin + (ymax - ymin) // 2)
+    M = cv2.getRotationMatrix2D(eyes_center, angle, 1)
+
+    align_frame = cv2.warpAffine(frame, M, (0, 0))
+    aligned_face = align_frame[ymin:ymax, xmin:xmax]
+    return aligned_face
 
 
 def detect(params, filename, db_clients):
@@ -88,18 +128,21 @@ def detect(params, filename, db_clients):
         ts = int(cap.get(cv2.CAP_PROP_POS_MSEC))
         faces = get_faces(params, frame)
         for face in faces:
-            s = (face[6] - face[4]) * (face[5] - face[3])
-            if s < config.MIN_SIZE:
-                continue
-
             xmin, ymin, xmax, ymax = utils.get_face_rect(face[3:], *frame.shape[:2],
                                                          **params['face']['input_size'])
+            face_h = ymax - ymin
+            face_w = xmax - xmin
+            if face_w < 60 or face_h < 80:
+                continue
+
             origin_face = frame[ymin:ymax, xmin:xmax]
 
             if not origin_face.shape[0] or not origin_face.shape[1]:
                 continue
 
-            resized_face = utils.preprocess_image_format(origin_face,
+            aligned_face = align_face(params, origin_face, frame, (xmin, ymin, xmax, ymax))
+
+            resized_face = utils.preprocess_image_format(aligned_face,
                                                          **params['reid']['input_size'],
                                                          net_type='reid')
             blur = utils.get_blur_coef(resized_face)
@@ -108,18 +151,15 @@ def detect(params, filename, db_clients):
 
             face_emb = get_face_emb(params, resized_face)
 
-            y_pad = (ymax - ymin)
-            x_pad = (xmax - xmin)
-            padded_face = frame[max(0, ymin - y_pad):ymax + y_pad,
-                          max(0, xmin - x_pad):xmax + x_pad]
+            padded_face = frame[max(0, ymin - face_h):ymax + face_h,
+                                max(0, xmin - face_w):xmax + face_w]
 
-            person_idx = get_person_idx(face_emb, mongo, origin_face, padded_face)
+            person_idx = get_person_idx(face_emb, mongo, aligned_face, padded_face)
             faces_ts[person_idx].append(ts)
             detected_faces.add(person_idx)
 
         if frame_num % (30 * 60) == 0:  # update db each 1 min of video
             redis.set(filename, frame_num / frame_count * 100)
-            faiss.write_index(FAISS_INDEX, config.INDEX_FACE_PATH)
             update_mongo_faces(mongo, filename, faces_ts, detected_faces)
             detected_faces = set()
 

@@ -4,7 +4,7 @@ services:
     image: rabbitmq:3-management
     restart: unless-stopped
     volumes:
-      - ~/Desktop/db_faceReId/rabbitmq:/var/lib/rabbitmq
+      - ~/faceReId/db/rabbitmq:/var/lib/rabbitmq
     expose:
       - "5672"
     ports:
@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - ~/Desktop/db_faceReId/redis:/data
+      - ~/faceReId/db/redis:/data
     expose:
       - "6379"
     ports:
@@ -26,7 +26,7 @@ services:
     image: mongo
     restart: unless-stopped
     volumes:
-      - ~/Desktop/db_faceReId/mongo:/data/db
+      - ~/faceReId/db/mongo:/data/db
     expose:
       - "27017"
     ports:
@@ -38,8 +38,9 @@ services:
       dockerfile: ./docker/Dockerfile
     restart: unless-stopped
     volumes:
-      - ~/Desktop/driveData:/video_data
-      - ~/Desktop/db_faceReId/faiss:/faiss
+      - ~/faceReId/driveData:/video
+      - ~/faceReId/faces:/faces
+      - ~/faceReId/db/faiss:/faiss
     depends_on:
       - mongodb
       - rabbitmq
@@ -48,11 +49,6 @@ services:
       - mongodb
       - rabbitmq
       - redis
-
-volumes:
-  rabbitmq-data:
-  mongodb-data:
-  redis-data:
 
 networks:
   default:

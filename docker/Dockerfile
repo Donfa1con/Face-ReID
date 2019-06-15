@@ -37,6 +37,7 @@ RUN pip3 install -r requirements.txt
 RUN /opt/intel/openvino/deployment_tools/tools/model_downloader/downloader.py --list docker/model.lst --output models
 
 ENV FACE_MODEL_PATH=./models/Transportation/object_detection/face/pruned_mobilenet_reduced_ssd_shared_weights/dldt/face-detection-adas-0001 \
+    LANDMARKS_MODEL_PATH=./models/Retail/object_attributes/landmarks_regression/0009/dldt/landmarks-regression-retail-0009 \
     REID_MODEL_PATH=./models/Retail/object_reidentification/face/mobilenet_based/dldt/face-reidentification-retail-0095 \
     PLUGIN_PATH=/opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_avx2.so \
     LC_ALL=C.UTF-8 \

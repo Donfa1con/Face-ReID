@@ -21,25 +21,33 @@ def create_logger():
 def load_models():
     face_model_xml = os.getenv("FACE_MODEL_PATH") + ".xml"
     face_model_bin = os.getenv("FACE_MODEL_PATH") + ".bin"
+
     reid_model_xml = os.getenv("REID_MODEL_PATH") + ".xml"
     reid_model_bin = os.getenv("REID_MODEL_PATH") + ".bin"
+
+    mark_model_xml = os.getenv("LANDMARKS_MODEL_PATH") + ".xml"
+    mark_model_bin = os.getenv("LANDMARKS_MODEL_PATH") + ".bin"
 
     plugin = IEPlugin(device="CPU")
     plugin.add_cpu_extension(os.getenv("PLUGIN_PATH"))
 
     face_net = IENetwork(model=face_model_xml, weights=face_model_bin)
     reid_net = IENetwork(model=reid_model_xml, weights=reid_model_bin)
+    mark_net = IENetwork(model=mark_model_xml, weights=mark_model_bin)
 
     exec_face_net = plugin.load(network=face_net)
     exec_reid_net = plugin.load(network=reid_net)
-    return exec_face_net, exec_reid_net, face_net, reid_net
+    exec_mark_net = plugin.load(network=mark_net)
+
+    return exec_face_net, exec_reid_net, exec_mark_net, face_net, reid_net, mark_net
 
 
 def init_detection_config():
-    exec_face_net, exec_reid_net, face_net, reid_net = load_models()
+    exec_face_net, exec_reid_net, exec_mark_net, face_net, reid_net, mark_net = load_models()
 
     _, _, face_net_h, face_net_w = face_net.inputs[next(iter(face_net.inputs))].shape
     _, _, reid_net_h, reid_net_w = reid_net.inputs[next(iter(reid_net.inputs))].shape
+    _, _, mark_net_h, mark_net_w = mark_net.inputs[next(iter(mark_net.inputs))].shape
 
     params = {'face': {'net': exec_face_net,
                        'input_size': {'h': face_net_h,
@@ -49,7 +57,11 @@ def init_detection_config():
               'reid': {'net': exec_reid_net,
                        'input_size': {'h': reid_net_h,
                                       'w': reid_net_w}
-                       }
+                       },
+              'landmarks': {'net': exec_mark_net,
+                            'input_size': {'h': mark_net_h,
+                                           'w': mark_net_w}
+                            }
               }
     return params
 
@@ -80,8 +92,8 @@ def resize_image(image, w, h):
 def preprocess_image_format(image, w, h, net_type):
     if net_type == 'face':
         image = resize_image(image, w, h)
-    if net_type == 'reid':
-        image = cv2.resize(image, (w, h), interpolation=cv2.INTER_LINEAR)
+    else:
+        image = cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA)
     image = image.transpose((2, 0, 1))
     return image
 
