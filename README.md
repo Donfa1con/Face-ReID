@@ -13,6 +13,7 @@ docker-compose up --build
 - send path to video or image to Rebbit queue
 
 ```python
+import pika
 from pathlib import Path
 
 VIDEO_PATH = '~/Desktop/driveData/' # mounted folder with video
@@ -49,8 +50,10 @@ client = pymongo.MongoClient('mongodb://localhost:27017/')
 face_data_0 = list(client.video_db.Faces.find({'_id': '0'}))[0]
  
 # {'_id': 0,
-#  'face': encoded image
-#  'face_crop': padded encoded image
+#  'face': encoded image    # if config.IMAGE_PATH is None
+#  'face_pad': padded encoded image    # if config.IMAGE_PATH is None
+#  'face_path': path_to_padded_image_folder}
+#  'face_pad_path': path_to_face_image_folder,
 #  'paths': {'path_to_video_1': [40, 80], # millisec ts
 #            'path_to_video_2': [120, 160, 200]}
 
@@ -69,6 +72,7 @@ product_distance, closest_person_ids = faiss_index.search(face_2_vecor.reshape(1
 ```
 Openvino Pretrained models
  - [Detectiion](https://docs.openvinotoolkit.org/latest/_face_detection_adas_0001_description_face_detection_adas_0001.html)
+ - [Landmarks](http://docs.openvinotoolkit.org/latest/_landmarks_regression_retail_0009_description_landmarks_regression_retail_0009.html)
  - [Re-Identification](https://docs.openvinotoolkit.org/latest/_face_reidentification_retail_0095_description_face_reidentification_retail_0095.html)
  
  
